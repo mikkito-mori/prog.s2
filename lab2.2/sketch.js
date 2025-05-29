@@ -3,9 +3,11 @@ let floor;
 let canyonsAmount = 3;
 let seedsAmount = 10;
 let crowsAmount = 2;
+let platformsAmount = 3; 
 let canyons = [];
 let seeds = [];
 let crows = [];
+let platforms = []; 
 let score = 0;
 let hamsterDeath = new Audio("./hamsterDeath.mp3");
 let crowDeath = new Audio("./crowDeath.mp3");
@@ -125,7 +127,8 @@ function initGame() {
     canyons = [];
     seeds = [];
     crows = [];
-    
+    platforms = []; 
+
     floor = {
         x: 0,
         height: 200,
@@ -221,6 +224,34 @@ function initGame() {
         });
     }
 
+    for (let i = 0; i < platformsAmount; i++) {
+        platforms.push({
+            x: 350 + i * 350, 
+            y: 100 + (200), 
+            width: 120 + random(80), 
+            height: 20,
+            color: color(150, 100, 50), 
+            draw: function() {
+                fill(this.color);
+                rect(this.x, height - this.height - this.y, this.width, this.height);
+                
+                fill(120, 80, 40);
+                for (let j = 0; j < 5; j++) {
+                    rect(this.x + j * (this.width/5), 
+                         height - this.height - this.y, 
+                         this.width/5 - 2, 
+                         this.height/2);
+                }
+            },
+            contains: function(x, y) {
+                return x >= this.x && 
+                       x <= this.x + this.width && 
+                       y >= height - this.height - this.y && 
+                       y <= height - this.y;
+            }
+        });
+    }
+
     hamster = {
         x: 100,
         y: innerHeight - floor.height,
@@ -230,6 +261,7 @@ function initGame() {
         color: "#b92d2d",
         isGrounded: false,
         isDead: false,
+        onPlatform: false, 
 
         draw: function () {
             if (this.isDead) return;
@@ -280,27 +312,106 @@ function initGame() {
                     gameOver = true;
                     restartButton.style('display', 'block');
                 }
-            } else if (this.y + this.height > height - floor) {
-                this.y = height - floor - this.height;
-                this.isGrounded = true;
             } else {
-                this.isGrounded = false;
+                this.checkPlatforms(); 
+                
+                if (!this.onPlatform && this.y + this.height > height - floor) {
+                    this.y = height - floor - this.height;
+                    this.isGrounded = true;
+                    this.speedGravity = 0;
+                }
             }
         },
+
+    checkPlatforms: function() {
+        this.onPlatform = false;
+        let wasOnPlatform = false;
+        
+        for (let platform of platforms) {
+            const platformTop = height - platform.height - platform.y;
+            const platformBottom = platformTop + platform.height;
+            const platformLeft = platform.x;
+            const platformRight = platform.x + platform.width;
+            
+            const hamsterLeft = this.x - this.width/2;
+            const hamsterRight = this.x + this.width/2;
+            const hamsterBottom = this.y + this.height;
+            
+            const horizontalOverlap = hamsterRight > platformLeft && hamsterLeft < platformRight;
+            
+            if (horizontalOverlap && 
+                hamsterBottom >= platformTop && 
+                hamsterBottom <= platformTop + this.speedGravity && 
+                this.speedGravity > 0) {
+                
+                this.y = platformTop - this.height;
+                this.speedGravity = 0;
+                this.isGrounded = true;
+                this.onPlatform = true;
+                wasOnPlatform = true;
+            }
+            
+            if (horizontalOverlap && 
+                hamsterBottom >= platformTop && 
+                hamsterBottom <= platformBottom) {
+                wasOnPlatform = true;
+            }
+        }
+        
+        if (!wasOnPlatform && this.onPlatform) {
+            this.onPlatform = false;
+            this.isGrounded = false;
+        }
+    },
 
         jump: function () {
             if (this.isGrounded) {
                 this.speedGravity = -20;
                 this.isGrounded = false;
+                this.onPlatform = false;
             }
         },
 
         moveLeft: function () {
             this.x -= 5;
+            if (this.onPlatform) {
+                let onAnyPlatform = false;
+                for (let platform of platforms) {
+                    const platformTop = height - platform.height - platform.y;
+                    if (this.x > platform.x && 
+                        this.x < platform.x + platform.width &&
+                        this.y + this.height >= platformTop && 
+                        this.y + this.height <= platformTop + platform.height) {
+                        onAnyPlatform = true;
+                        break;
+                    }
+                }
+                if (!onAnyPlatform) {
+                    this.onPlatform = false;
+                    this.isGrounded = false;
+                }
+            }
         },
 
         moveRight: function () {
             this.x += 5;
+            if (this.onPlatform) {
+                let onAnyPlatform = false;
+                for (let platform of platforms) {
+                    const platformTop = height - platform.height - platform.y;
+                    if (this.x > platform.x && 
+                        this.x < platform.x + platform.width &&
+                        this.y + this.height >= platformTop && 
+                        this.y + this.height <= platformTop + platform.height) {
+                        onAnyPlatform = true;
+                        break;
+                    }
+                }
+                if (!onAnyPlatform) {
+                    this.onPlatform = false;
+                    this.isGrounded = false;
+                }
+            }
         },
 
         movement: function () {
@@ -351,13 +462,11 @@ function initGame() {
 
                 if (this.x < crow.x + 75 && this.x + this.width > crow.x && this.y < crow.y + 70 && this.y + this.height > crow.y) {
                     if (this.speedGravity > 0 && this.y + this.height <= crow.y + 20) {
-                        // Победа над вороной
                         crow.isDead = true;
                         this.speedGravity = -10;
                         crowDeath.play();
                         score += 10;
                     } else {
-                        // Смерть от вороны
                         this.die();
                     }
                     break;
@@ -418,6 +527,10 @@ function draw() {
     floor.draw();
     backmus.play();
 
+    for (let platform of platforms) {
+        platform.draw();
+    }
+
     for (let canyon of canyons) {
         canyon.draw();
     }
@@ -444,4 +557,4 @@ function draw() {
     }
 
     drawScore();
-}
+} 
