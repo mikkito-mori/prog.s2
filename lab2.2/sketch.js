@@ -1,13 +1,13 @@
 let hamster;
 let floor;
-let canyonsAmount = 3;
-let seedsAmount = 10;
-let crowsAmount = 2;
-let platformsAmount = 3; 
+let canyonsAmount = 4;
+let seedsAmount = 4;
+let crowsAmount = 5;
+let platformsAmount = 5;
 let canyons = [];
 let seeds = [];
 let crows = [];
-let platforms = []; 
+let platforms = [];
 let score = 0;
 let hamsterDeath = new Audio("./hamsterDeath.mp3");
 let crowDeath = new Audio("./crowDeath.mp3");
@@ -16,8 +16,38 @@ let backmus = new Audio("./background_music.mp3");
 let restartButton;
 let gameOver = false;
 
+let cameraOffset = 0;
+const cameraThreshold = 300;
+const levelWidth = 2500;
+
+let clouds = [];
+let grasses = [];
+let sun = {
+    x: 100,
+    y: 100,
+    size: 100
+};
+
 function setup() {
     createCanvas(1500, innerHeight);
+    
+    for (let i = 0; i < 10; i++) {
+        clouds.push({
+            x: random(levelWidth),
+            y: random(100, 300),
+            width: random(100, 200),
+            height: random(50, 80),
+            speed: random(0.2, 0.8)
+        });
+    }
+    
+    for (let i = 0; i < 50; i++) {
+        grasses.push({
+            x: random(levelWidth),
+            height: random(20, 60),
+            color: color(10, 100 + random(50), 10 + random(30))
+        });
+    }
     
     restartButton = createButton('🔄 Перезапустить');
     restartButton.position(width/2 - 100, height/2 + 100);
@@ -28,7 +58,7 @@ function setup() {
     restartButton.style('border', 'none');
     restartButton.style('border-radius', '10px');
     restartButton.style('cursor', 'pointer');
-    restartButton.style('display', 'none'); 
+    restartButton.style('display', 'none');
     restartButton.mousePressed(restartGame);
     
     let soundControls = createDiv('');
@@ -63,26 +93,49 @@ function setup() {
     volumeSlider.style('cursor', 'pointer');
     volumeSlider.parent(soundControls);
     
-    volumeSlider.elt.style.setProperty('--thumb-size', '16px');
-    let style = document.createElement('style');
-    style.innerHTML = `
+    volumeSlider.elt.style.setProperty('--thumb-color', '#4CAF50');
+    volumeSlider.elt.style.setProperty('--track-color', '#ddd');
+    volumeSlider.elt.style.setProperty('--thumb-hover-color', '#45a049');
+    
+    let sliderStyle = document.createElement('style');
+    sliderStyle.innerHTML = `
+        #volumeSlider {
+            -webkit-appearance: none;
+            height: 8px;
+            background: var(--track-color);
+            border-radius: 4px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        #volumeSlider:hover {
+            opacity: 1;
+        }
         #volumeSlider::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: var(--thumb-size);
-            height: var(--thumb-size);
+            width: 16px;
+            height: 16px;
             border-radius: 50%;
-            background: #4CAF50;
+            background: var(--thumb-color);
             cursor: pointer;
+            transition: background 0.2s;
+        }
+        #volumeSlider::-webkit-slider-thumb:hover {
+            background: var(--thumb-hover-color);
         }
         #volumeSlider::-moz-range-thumb {
-            width: var(--thumb-size);
-            height: var(--thumb-size);
+            width: 16px;
+            height: 16px;
             border-radius: 50%;
-            background: #4CAF50;
+            background: var(--thumb-color);
             cursor: pointer;
+            transition: background 0.2s;
+        }
+        #volumeSlider::-moz-range-thumb:hover {
+            background: var(--thumb-hover-color);
         }
     `;
-    document.head.appendChild(style);
+    document.head.appendChild(sliderStyle);
     
     volumeSlider.input(() => {
         let volume = volumeSlider.value();
@@ -127,110 +180,170 @@ function initGame() {
     canyons = [];
     seeds = [];
     crows = [];
-    platforms = []; 
-
+    platforms = [];
+    cameraOffset = 0;
+    
     floor = {
         x: 0,
         height: 200,
         color: color(10, 100, 10),
         draw: function () {
-            fill(this.color);
-            rect(this.x, innerHeight - this.height, width, this.height);
+            for (let x = -width; x < levelWidth + width; x += width) {
+                fill(this.color);
+                rect(x, innerHeight - this.height, width, this.height);
+            }
         }
     };
 
+    let canyonPositions = [];
+    let minCanyonGap = 350; 
+    let attempts = 0;
+    const maxAttempts = 100;
+
     for (let i = 0; i < canyonsAmount; i++) {
-        canyons.push({
-            x: 250 + i * 400,
-            y: innerHeight - floor.height,
-            width: 120,
-            draw: function () {
-                fill(100);
-                rect(this.x, this.y, this.width, floor.height);
+        let validPosition = false;
+        let newCanyonX, newCanyonWidth;
+        
+        while (!validPosition && attempts < maxAttempts) {
+            attempts++;
+            newCanyonX = 200 + random(levelWidth - 400);
+            newCanyonWidth = 100 + random(100);
+            
+            validPosition = true;
+            for (let pos of canyonPositions) {
+                if (abs(newCanyonX - pos.x) < minCanyonGap + pos.width/2 + newCanyonWidth/2) {
+                    validPosition = false;
+                    break;
+                }
             }
-        });
+        }
+        
+        if (validPosition) {
+            canyonPositions.push({
+                x: newCanyonX,
+                width: newCanyonWidth
+            });
+            
+            canyons.push({
+                x: newCanyonX,
+                y: innerHeight - floor.height,
+                width: newCanyonWidth,
+                draw: function () {
+                    fill(100);
+                    rect(this.x, this.y, this.width, floor.height);
+                }
+            });
+        }
+        attempts = 0;
     }
 
     for (let i = 0; i < seedsAmount; i++) {
-        seeds.push({
-            x: 350 + i * 300,
-            y: innerHeight - floor.height - 50,
-            size: 30,
-            random: Math.floor(Math.random() * 50),
-            collected: false,
-
-            draw: function () {
-                if (this.collected) return;
-
-                fill(210, 180, 140);
-                noStroke();
-                ellipse(this.x, this.y, this.size * 1.2, this.size);
-
-                fill(160, 130, 100);
-                arc(this.x, this.y, this.size * 1.2, this.size, -PI / 4, PI / 4);
+        let validPosition = false;
+        let newSeedX, newSeedY;
+        
+        while (!validPosition && attempts < maxAttempts) {
+            attempts++;
+            newSeedX = 200 + random(levelWidth - 400);
+            newSeedY = innerHeight - floor.height - 50 - random(100);
+            
+            validPosition = true;
+            for (let canyon of canyons) {
+                if (newSeedX > canyon.x && newSeedX < canyon.x + canyon.width) {
+                    validPosition = false;
+                    break;
+                }
             }
-        });
+        }
+        
+        if (validPosition) {
+            seeds.push({
+                x: newSeedX,
+                y: newSeedY,
+                size: 20 + random(20),
+                random: Math.floor(Math.random() * 50),
+                collected: false,
+                draw: function () {
+                    if (this.collected) return;
+                    fill(210, 180, 140);
+                    noStroke();
+                    ellipse(this.x, this.y, this.size * 1.2, this.size);
+                    fill(160, 130, 100);
+                    arc(this.x, this.y, this.size * 1.2, this.size, -PI / 4, PI / 4);
+                }
+            });
+        }
+        attempts = 0;
     }
 
     for (let i = 0; i < crowsAmount; i++) {
-        crows.push({
-            x: 300 + i * 200,
-            y: innerHeight - floor.height - 50,
-            l: 400 + i * 200,
-            r: 700 + i * 200,
-            direction: 1,
-            random: 0,
-            isDead: false,
-
-            draw: function () {
-                if (this.isDead) return;
-
-                fill(0);
-                ellipse(this.x, this.y, 25, 20);
-
-                ellipse(this.x, this.y - 15, 16, 16);
-
-                fill(255, 204, 0);
-                triangle(this.x + 3, this.y - 15, this.x + 10, this.y - 10, this.x + 3, this.y - 10);
-
-                fill(255);
-                ellipse(this.x + 4, this.y - 17, 4, 4);
-                fill(0);
-                ellipse(this.x + 5, this.y - 17, 2, 2);
-
-                fill(0);
-                arc(this.x - 12, this.y, 20, 15, 0, PI);
-                arc(this.x + 12, this.y, 20, 15, 0, PI);
-
-                stroke(0);
-                line(this.x - 5, this.y + 10, this.x - 5, this.y + 17);
-                line(this.x + 5, this.y + 10, this.x + 5, this.y + 17);
-                noStroke();
-
-                fill(0);
-                triangle(this.x, this.y, this.x - 10, this.y + 5, this.x + 10, this.y + 5);
-            },
-            move: function () {
-                if (this.isDead) return;
-                this.x += this.random * this.direction;
-                if (this.x <= this.l) {
-                    this.x += this.l - this.x;
-                    this.direction *= -1;
-                } else if (this.x >= this.r) {
-                    this.x -= this.x - this.r;
-                    this.direction *= -1;
+        let validPosition = false;
+        let crowX, crowY;
+        
+        while (!validPosition && attempts < maxAttempts) {
+            attempts++;
+            crowX = 200 + random(levelWidth - 400);
+            crowY = 490;
+            
+            validPosition = true;
+            for (let canyon of canyons) {
+                if (crowX > canyon.x && crowX < canyon.x + canyon.width) {
+                    validPosition = false;
+                    break;
                 }
             }
-        });
+        }
+        
+        if (validPosition) {
+            crows.push({
+                x: crowX,
+                y: crowY,
+                l: crowX - 100 - random(100),
+                r: crowX + 100 + random(100),
+                direction: random() > 0.5 ? 1 : -1,
+                random: 1 + random(3),
+                isDead: false,
+                draw: function () {
+                    if (this.isDead) return;
+                    fill(0);
+                    ellipse(this.x, this.y, 25, 20);
+                    ellipse(this.x, this.y - 15, 16, 16);
+                    fill(255, 204, 0);
+                    triangle(this.x + 3, this.y - 15, this.x + 10, this.y - 10, this.x + 3, this.y - 10);
+                    fill(255);
+                    ellipse(this.x + 4, this.y - 17, 4, 4);
+                    fill(0);
+                    ellipse(this.x + 5, this.y - 17, 2, 2);
+                    fill(0);
+                    arc(this.x - 12, this.y, 20, 15, 0, PI);
+                    arc(this.x + 12, this.y, 20, 15, 0, PI);
+                    stroke(0);
+                    line(this.x - 5, this.y + 10, this.x - 5, this.y + 17);
+                    line(this.x + 5, this.y + 10, this.x + 5, this.y + 17);
+                    noStroke();
+                    fill(0);
+                    triangle(this.x, this.y, this.x - 10, this.y + 5, this.x + 10, this.y + 5);
+                },
+                move: function () {
+                    if (this.isDead) return;
+                    this.x += this.random * this.direction;
+                    if (this.x <= this.l) {
+                        this.direction = 1;
+                    } else if (this.x >= this.r) {
+                        this.direction = -1;
+                    }
+                }
+            });
+        }
+        attempts = 0;
     }
 
     for (let i = 0; i < platformsAmount; i++) {
         platforms.push({
-            x: 350 + i * 350, 
-            y: 100 + (200), 
-            width: 120 + random(80), 
+            x: 350 + i * 350,
+            y: 200 + random(200),
+            width: 80 + random(100),
             height: 20,
-            color: color(150, 100, 50), 
+            color: color(150, 100, 50),
             draw: function() {
                 fill(this.color);
                 rect(this.x, height - this.height - this.y, this.width, this.height);
@@ -261,7 +374,7 @@ function initGame() {
         color: "#b92d2d",
         isGrounded: false,
         isDead: false,
-        onPlatform: false, 
+        onPlatform: false,
 
         draw: function () {
             if (this.isDead) return;
@@ -313,7 +426,7 @@ function initGame() {
                     restartButton.style('display', 'block');
                 }
             } else {
-                this.checkPlatforms(); 
+                this.checkPlatforms();
                 
                 if (!this.onPlatform && this.y + this.height > height - floor) {
                     this.y = height - floor - this.height;
@@ -323,46 +436,40 @@ function initGame() {
             }
         },
 
-    checkPlatforms: function() {
-        this.onPlatform = false;
-        let wasOnPlatform = false;
-        
-        for (let platform of platforms) {
-            const platformTop = height - platform.height - platform.y;
-            const platformBottom = platformTop + platform.height;
-            const platformLeft = platform.x;
-            const platformRight = platform.x + platform.width;
-            
-            const hamsterLeft = this.x - this.width/2;
-            const hamsterRight = this.x + this.width/2;
-            const hamsterBottom = this.y + this.height;
-            
-            const horizontalOverlap = hamsterRight > platformLeft && hamsterLeft < platformRight;
-            
-            if (horizontalOverlap && 
-                hamsterBottom >= platformTop && 
-                hamsterBottom <= platformTop + this.speedGravity && 
-                this.speedGravity > 0) {
-                
-                this.y = platformTop - this.height;
-                this.speedGravity = 0;
-                this.isGrounded = true;
-                this.onPlatform = true;
-                wasOnPlatform = true;
-            }
-            
-            if (horizontalOverlap && 
-                hamsterBottom >= platformTop && 
-                hamsterBottom <= platformBottom) {
-                wasOnPlatform = true;
-            }
-        }
-        
-        if (!wasOnPlatform && this.onPlatform) {
+        checkPlatforms: function() {
             this.onPlatform = false;
-            this.isGrounded = false;
-        }
-    },
+            let fallingFromPlatform = true;
+            
+            for (let platform of platforms) {
+                const platformTop = height - platform.height - platform.y;
+                const platformBottom = platformTop + platform.height;
+                const platformLeft = platform.x;
+                const platformRight = platform.x + platform.width;
+                
+                if (this.x + this.width/2 > platformLeft && 
+                    this.x - this.width/2 < platformRight) {
+                    
+                    if (this.y + this.height >= platformTop && 
+                        this.y + this.height <= platformBottom &&
+                        this.speedGravity >= 0) {
+                        
+                        this.y = platformTop - this.height;
+                        this.speedGravity = 0;
+                        this.isGrounded = true;
+                        this.onPlatform = true;
+                    }
+                    
+                    if (this.y + this.height >= platformTop && 
+                        this.y <= platformBottom) {
+                        fallingFromPlatform = false;
+                    }
+                }
+            }
+            
+            if (!this.onPlatform && this.isGrounded && fallingFromPlatform) {
+                this.isGrounded = false;
+            }
+        },
 
         jump: function () {
             if (this.isGrounded) {
@@ -391,6 +498,11 @@ function initGame() {
                     this.isGrounded = false;
                 }
             }
+            
+            if (this.x < cameraOffset + cameraThreshold) {
+                cameraOffset = this.x - cameraThreshold;
+                if (cameraOffset < 0) cameraOffset = 0;
+            }
         },
 
         moveRight: function () {
@@ -412,12 +524,17 @@ function initGame() {
                     this.isGrounded = false;
                 }
             }
+            
+            if (this.x > cameraOffset + width - cameraThreshold) {
+                cameraOffset = this.x - (width - cameraThreshold);
+                if (cameraOffset > levelWidth - width) cameraOffset = levelWidth - width;
+            }
         },
 
         movement: function () {
             if (this.isDead) return;
-            if (this.x < -10) this.x = innerWidth + 5;
-            if (this.x > innerWidth + 10) this.x = -5;
+            if (this.x < -10) this.x = levelWidth + 5;
+            if (this.x > levelWidth + 10) this.x = -5;
             if (this.isGrounded && keyIsDown(87)) this.jump();
             if (keyIsDown(68)) this.moveRight();
             if (keyIsDown(65)) this.moveLeft();
@@ -522,11 +639,71 @@ function drawGameOver() {
     text("GAME OVER", width/2, height/2 - 50);
 }
 
-function draw() {
-    background("#4dd5ef");
-    floor.draw();
-    backmus.play();
+function drawBackground() {
 
+    let skyColor1 = color(135, 206, 235); 
+    let skyColor2 = color(65, 105, 225);
+    for (let y = 0; y < height; y++) {
+        let inter = map(y, 0, height, 0, 1);
+        let c = lerpColor(skyColor1, skyColor2, inter);
+        stroke(c);
+        line(0, y, width, y);
+    }
+    
+    
+    fill(255, 255, 0);
+    noStroke();
+    ellipse(sun.x - cameraOffset * 0.2, sun.y, sun.size, sun.size);
+    
+    fill(255, 255, 255, 200);
+    noStroke();
+    for (let cloud of clouds) {
+        let cloudX = cloud.x - cameraOffset * 0.5;
+        if (cloudX + cloud.width > 0 && cloudX < width) {
+            ellipse(cloudX, cloud.y, cloud.width, cloud.height);
+            ellipse(cloudX + cloud.width/4, cloud.y - cloud.height/2, cloud.width/2, cloud.height);
+            ellipse(cloudX - cloud.width/4, cloud.y, cloud.width/2, cloud.height);
+        }
+        cloud.x += cloud.speed;
+        if (cloud.x > levelWidth + cloud.width) {
+            cloud.x = -cloud.width;
+        }
+    }
+    
+    fill(100, 80, 60);
+    beginShape();
+    vertex(0 - cameraOffset * 0.3, height - floor.height);
+    for (let x = 0; x < levelWidth + 500; x += 100) {
+        let y = height - floor.height - 150 - noise(x * 0.01) * 200;
+        vertex(x - cameraOffset * 0.3, y);
+    }
+    vertex(levelWidth + 500 - cameraOffset * 0.3, height - floor.height);
+    endShape(CLOSE);
+    
+    for (let grass of grasses) {
+        let grassX = grass.x - cameraOffset * 0.7;
+        if (grassX > -50 && grassX < width + 50) {
+            fill(grass.color);
+            noStroke();
+            beginShape();
+            vertex(grassX, height - floor.height);
+            vertex(grassX + 5, height - floor.height - grass.height * 0.7);
+            vertex(grassX + 10, height - floor.height - grass.height);
+            vertex(grassX + 5, height - floor.height - grass.height * 0.8);
+            vertex(grassX, height - floor.height - grass.height * 0.9);
+            endShape();
+        }
+    }
+}
+
+function draw() {
+    drawBackground();
+    
+    push();
+    translate(-cameraOffset, 0);
+    
+    floor.draw();
+    
     for (let platform of platforms) {
         platform.draw();
     }
@@ -540,7 +717,6 @@ function draw() {
     }
 
     for (let crow of crows) {
-        crow.random = Math.floor(Math.random() * (7 - 1)) + 1;
         crow.move();
         crow.draw();
     }
@@ -552,9 +728,15 @@ function draw() {
         hamster.checkSeeds();
         hamster.checkCrows();
         hamster.draw();
-    } else {
+    }
+    
+    pop();
+    
+    drawScore();
+    
+    if (gameOver) {
         drawGameOver();
     }
 
-    drawScore();
-} 
+    backmus.play();
+}
